@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table
+@Table(indexes = @Index(name = "vehicleIdIdx", columnList = "vehicleId"))
 public class ChargeDetailRecord {
     @Id
     @SequenceGenerator(
