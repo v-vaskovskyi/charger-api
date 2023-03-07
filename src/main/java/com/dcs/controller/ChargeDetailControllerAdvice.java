@@ -1,5 +1,6 @@
 package com.dcs.controller;
 
+import com.dcs.exception.ChangeDetailRecordExistsWithinDateRangeForVehicle;
 import com.dcs.exception.ChargeDetailRecordByIdNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,19 @@ public class ChargeDetailControllerAdvice {
                         e.getMessage()
                 ),
                 HttpStatus.NOT_FOUND
+        );
+    }
+
+    @ExceptionHandler(ChangeDetailRecordExistsWithinDateRangeForVehicle.class)
+    public ResponseEntity<ErrorResponse> handleChargeDetailRecordOverlappingException(
+            Exception e) {
+        return new ResponseEntity<>(
+                ErrorResponse.create(
+                        e,
+                        HttpStatus.BAD_REQUEST,
+                        e.getMessage()
+                ),
+                HttpStatus.BAD_REQUEST
         );
     }
 }

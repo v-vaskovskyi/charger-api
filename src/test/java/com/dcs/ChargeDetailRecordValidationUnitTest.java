@@ -1,6 +1,8 @@
 package com.dcs;
 
 import com.dcs.dto.ChargeDetailRecordDto;
+import com.dcs.exception.ChangeDetailRecordExistsWithinDateRangeForVehicle;
+import com.dcs.exception.ChargeDetailRecordByIdNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,8 +23,8 @@ import org.springframework.web.context.WebApplicationContext;
 
 import java.time.LocalDateTime;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -50,6 +52,12 @@ public class ChargeDetailRecordValidationUnitTest {
 	@Value("${message.cost.positive}")
 	private String messageCostMustBePositive;
 
+	@Value("${message.data.range.overlaps}")
+	private String messageDateRangeOverlaps;
+
+	@Value("${message.record.not.exists}")
+	private String messageRecordNotExits;
+
 	@BeforeEach
 	void init() {
 		mockMvc = MockMvcBuilders
@@ -58,6 +66,17 @@ public class ChargeDetailRecordValidationUnitTest {
 		objectMapper = JsonMapper.builder()
 				.findAndAddModules()
 				.build();
+	}
+
+	@Test
+	@DisplayName("GET /api/v1/cdr/id/10000001")
+	public void testRecordNotExists() throws Exception {
+		final int ID = 10000001;
+		Exception exception = mockMvc.perform(get("/api/v1/cdr/id/" + ID))
+				.andExpect(status().is(HttpStatus.NOT_FOUND.value()))
+				.andReturn().getResolvedException();
+		assertEquals(exception.getClass(), ChargeDetailRecordByIdNotFoundException.class);
+		assertTrue(exception.getMessage().contains(String.format(this.messageRecordNotExits, ID)));
 	}
 
 	@Test
@@ -102,14 +121,39 @@ public class ChargeDetailRecordValidationUnitTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/v1/cdr Positive")
-	public void testChargeDetailRecordPositive() throws Exception {
-		String jsonBody = objectMapper.writeValueAsString(initChargeDetailRecord());
+	@DisplayName("POST /api/v1/cdr Date Period overlaps Failure")
+	public void testChargeDetailRecordDatePeriodOverlapFails() throws Exception {
+		ChargeDetailRecordDto chargeDetailRecordDto = initChargeDetailRecord();
+		String jsonBody = objectMapper.writeValueAsString(chargeDetailRecordDto);
 		mockMvc.perform(post("/api/v1/cdr")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(jsonBody))
+				.andExpect(status().is(HttpStatus.OK.value()));
+		//create the same record with the same date range once again
+		Exception exception = mockMvc.perform(post("/api/v1/cdr")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(jsonBody))
+				.andExpect(status().is(HttpStatus.BAD_REQUEST.value()))
+				.andReturn().getResolvedException();
+		assertEquals(exception.getClass(), ChangeDetailRecordExistsWithinDateRangeForVehicle.class);
+		assertTrue(exception.getMessage().contains(
+				String.format(
+						this.messageDateRangeOverlaps,
+						chargeDetailRecordDto.getStartTime(),
+						chargeDetailRecordDto.getEndTime(),
+						chargeDetailRecordDto.getVehicleId())));
+	}
+
+	@Test
+	@DisplayName("POST /api/v1/cdr Positive")
+	public void testChargeDetailRecordPositive() throws Exception {
+		String jsonBody = objectMapper.writeValueAsString(initChargeDetailRecord());
+		String response = mockMvc.perform(post("/api/v1/cdr")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(jsonBody))
 				.andExpect(status().is(HttpStatus.OK.value()))
-				.andReturn().getResponse().getContentAsString().contains(VEHICLE_NO);
+				.andReturn().getResponse().getContentAsString();
+		assertTrue(response.contains(VEHICLE_NO));
 	}
 
 	//create Charge Detail Record and validate the output depending on it's values
@@ -124,7 +168,7 @@ public class ChargeDetailRecordValidationUnitTest {
 				.andExpect(status().is(HttpStatus.BAD_REQUEST.value()))
 				.andReturn().getResolvedException();
 		assertEquals(exception.getClass(), MethodArgumentNotValidException.class);
-		assertTrue(exception.getMessage() != null && exception.getMessage().contains(expectedMessage));
+		assertTrue(exception.getMessage().contains(expectedMessage));
 	}
 
 	//init normal record
